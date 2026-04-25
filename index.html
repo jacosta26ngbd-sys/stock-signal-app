@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Signal Screener</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0e17;
+  --surface: #111722;
+  --surface2: #1a2235;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+  --text: #e8eaf0;
+  --muted: #6b7a99;
+  --accent: #3b82f6;
+  --green: #10b981;
+  --green-bg: rgba(16,185,129,0.12);
+  --green-border: rgba(16,185,129,0.3);
+  --red: #ef4444;
+  --red-bg: rgba(239,68,68,0.12);
+  --red-border: rgba(239,68,68,0.3);
+  --amber: #f59e0b;
+  --amber-bg: rgba(245,158,11,0.12);
+  --amber-border: rgba(245,158,11,0.3);
+  --blue-bg: rgba(59,130,246,0.12);
+  --blue-border: rgba(59,130,246,0.3);
+  --mono: 'Space Mono', monospace;
+  --sans: 'DM Sans', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; min-height: 100vh; }
+
+.header { padding: 24px 24px 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+.header-top { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-bottom: 16px; }
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+h1 { font-family: var(--mono); font-size: 17px; font-weight: 700; }
+.tagline { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+.disclaimer-pill { font-size: 11px; background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber); padding: 5px 12px; border-radius: 20px; }
+
+.api-setup { background: var(--surface2); border: 1px solid var(--amber-border); border-radius: 10px; padding: 18px 20px; margin: 0 24px 20px; }
+.api-setup h3 { font-family: var(--mono); font-size: 13px; color: var(--amber); margin-bottom: 8px; }
+.api-setup p { font-size: 12px; color: var(--muted); line-height: 1.7; margin-bottom: 10px; }
+.api-setup a { color: var(--accent); }
+.api-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.api-row input { font-family: var(--mono); font-size: 12px; background: var(--surface); border: 1px solid var(--border2); color: var(--text); padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 220px; outline: none; }
+.api-row input:focus { border-color: var(--accent); }
+.api-row input::placeholder { color: var(--muted); }
+
+.main { padding: 0 24px 28px; }
+.watchlist-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+.watchlist-bar input { font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border2); color: var(--text); padding: 8px 12px; border-radius: 6px; width: 120px; text-transform: uppercase; outline: none; }
+.watchlist-bar input::placeholder { color: var(--muted); text-transform: none; }
+.watchlist-bar input:focus { border-color: var(--accent); }
+.btn { font-family: var(--mono); font-size: 12px; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border2); cursor: pointer; background: var(--surface); color: var(--text); transition: all 0.15s; white-space: nowrap; }
+.btn:hover { background: var(--surface2); }
+.btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-accent:hover { opacity: 0.88; }
+.btn-green { background: var(--green-bg); border-color: var(--green-border); color: var(--green); }
+.chip { font-family: var(--mono); font-size: 11px; padding: 4px 10px; border-radius: 4px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.chip:hover { border-color: var(--red); color: var(--red); }
+.chips-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 20px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.stat-label { font-size: 10px; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+.stat-value { font-size: 20px; font-family: var(--mono); font-weight: 700; }
+.stat-value.green { color: var(--green); }
+.stat-value.red { color: var(--red); }
+.stat-value.amber { color: var(--amber); }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 700px; }
+thead th { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; }
+thead th:hover { color: var(--text); }
+tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; }
+tbody tr:hover { background: var(--surface); }
+tbody td { padding: 12px 12px; font-size: 13px; vertical-align: middle; }
+.ticker-cell { font-family: var(--mono); font-weight: 700; font-size: 14px; }
+.name-cell { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.price { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+.change { font-family: var(--mono); font-size: 12px; }
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+
+.signal-badge { display: inline-flex; align-items: center; font-size: 11px; font-family: var(--mono); padding: 3px 9px; border-radius: 4px; font-weight: 700; white-space: nowrap; }
+.signal-badge.BUY  { background: var(--green-bg);  border: 1px solid var(--green-border);  color: var(--green); }
+.signal-badge.SELL { background: var(--red-bg);    border: 1px solid var(--red-border);    color: var(--red); }
+.signal-badge.WATCH{ background: var(--amber-bg);  border: 1px solid var(--amber-border);  color: var(--amber); }
+.signal-badge.HOLD { background: var(--blue-bg);   border: 1px solid var(--blue-border);   color: #60a5fa; }
+.signal-badge.ERR  { background: var(--surface2);  border: 1px solid var(--border);        color: var(--muted); }
+
+.rsi-wrap { display: flex; flex-direction: column; gap: 3px; }
+.rsi-bar-bg { width: 70px; height: 4px; border-radius: 2px; background: var(--surface2); overflow: hidden; }
+.rsi-bar-fill { height: 100%; border-radius: 2px; }
+.rsi-num { font-family: var(--mono); font-size: 12px; }
+
+.ind-wrap { display: flex; gap: 3px; flex-wrap: wrap; }
+.ind { font-size: 10px; font-family: var(--mono); padding: 2px 5px; border-radius: 3px; }
+.ind-bull { background: var(--green-bg); color: var(--green); }
+.ind-bear { background: var(--red-bg); color: var(--red); }
+.ind-neu  { background: var(--surface2); color: var(--muted); }
+
+.loading-cell { text-align: center; padding: 28px; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.refresh-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+.last-updated { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+.error-note { background: var(--red-bg); border: 1px solid var(--red-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 12px; color: var(--red); display: none; }
+
+.tabs { display: flex; gap: 0; }
+.tab { font-family: var(--mono); font-size: 12px; padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--muted); transition: all 0.2s; }
+.tab.active { color: var(--text); border-color: var(--accent); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+.guide-card { background: var(--surface); border-radius: 10px; padding: 16px; margin-bottom: 10px; border-left: 3px solid; }
+.guide-card.buy  { border-color: var(--green); }
+.guide-card.sell { border-color: var(--red); }
+.guide-card.watch{ border-color: var(--amber); }
+.guide-card.hold { border-color: #60a5fa; }
+.guide-title { font-family: var(--mono); font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.guide-body { font-size: 12px; color: var(--muted); line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div class="logo">
+      <div class="logo-dot"></div>
+      <div>
+        <h1>SIGNAL//SCREEN</h1>
+        <div class="tagline">live technical analysis dashboard</div>
+      </div>
+    </div>
+    <div class="disclaimer-pill">Educational only — not financial advice</div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('screener')">Screener</div>
+    <div class="tab" onclick="switchTab('guide')">Signal Guide</div>
+  </div>
+</div>
+
+<!-- API KEY SETUP -->
+<div class="api-setup" id="apiSetup">
+  <h3>&#9881; One-time setup — Free API Key Required</h3>
+  <p>This screener uses <strong style="color:var(--text)">Finnhub</strong> for live stock data (free, no credit card).
+  Get your free key at <a href="https://finnhub.io/register" target="_blank">finnhub.io/register</a> — takes 30 seconds.
+  Paste it below and click Connect. Your key is saved in this browser only.</p>
+  <div class="api-row">
+    <input type="text" id="apiKeyInput" placeholder="Paste your Finnhub API key here..." />
+    <button class="btn btn-green" onclick="saveApiKey()">Connect &#10003;</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <div class="tab-content active" id="tab-screener">
+
+    <div id="errorNote" class="error-note"></div>
+
+    <div class="watchlist-bar">
+      <input type="text" id="tickerInput" placeholder="Add ticker..." maxlength="6" onkeydown="if(event.key==='Enter')addTicker()">
+      <button class="btn btn-accent" onclick="addTicker()">+ Add</button>
+      <button class="btn" onclick="refreshAll()">&#8635; Refresh All</button>
+      <div class="chips-wrap" id="chips"></div>
+    </div>
+
+    <div class="refresh-bar">
+      <div class="last-updated" id="lastUpdated">Last updated: —</div>
+    </div>
+
+    <div class="stats-row" id="statsRow">
+      <div class="stat-card"><div class="stat-label">Tracked</div><div class="stat-value">—</div></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Price</th>
+            <th>Change</th>
+            <th>RSI (14)</th>
+            <th>MA Cross</th>
+            <th>Signal</th>
+            <th>Indicators</th>
+          </tr>
+        </thead>
+        <tbody id="stockTable">
+          <tr><td colspan="7" class="loading-cell">Enter your Finnhub API key above to load live data.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <div class="tab-content" id="tab-guide">
+    <div style="max-width:600px;">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;">How signals are determined</div>
+
+      <div class="guide-card buy">
+        <div class="guide-title" style="color:var(--green)">BUY — Potential Opportunity</div>
+        <div class="guide-body">RSI below 32 (oversold) and/or Golden Cross detected (50-day MA above 200-day MA). Suggests the stock may be undervalued relative to recent momentum. Strongest when multiple indicators align.</div>
+      </div>
+      <div class="guide-card sell">
+        <div class="guide-title" style="color:var(--red)">SELL — Caution Advised</div>
+        <div class="guide-body">RSI above 68 (overbought) and/or Death Cross detected (50-day MA below 200-day MA). Suggests the stock may be overextended and due for a pullback. Not a guarantee — some stocks stay overbought for extended periods.</div>
+      </div>
+      <div class="guide-card watch">
+        <div class="guide-title" style="color:var(--amber)">WATCH — Monitor Closely</div>
+        <div class="guide-body">RSI approaching extremes (30–40 or 60–70 range) but not yet there. Worth monitoring for a potential entry or exit developing. Set price alerts and check back frequently.</div>
+      </div>
+      <div class="guide-card hold">
+        <div class="guide-title" style="color:#60a5fa">HOLD — Neutral Territory</div>
+        <div class="guide-body">RSI between 40–60, no strong MA crossover. No extreme signal present. Suitable to hold existing positions. Continue monitoring but no urgent action indicated.</div>
+      </div>
+
+      <div style="margin-top:20px;background:var(--surface);border-radius:10px;padding:16px;font-size:12px;color:var(--muted);line-height:1.8;">
+        <p><strong style="color:var(--text);font-family:var(--mono);">RSI</strong> — Relative Strength Index. Measures momentum 0–100. Below 30 = oversold, above 70 = overbought.</p><br>
+        <p><strong style="color:var(--text);font-family:var(--mono);">Golden Cross</strong> — 50-day moving average crosses above 200-day. Classic long-term bullish signal.</p><br>
+        <p><strong style="color:var(--text);font-family:var(--mono);">Death Cross</strong> — 50-day moving average falls below 200-day. Classic long-term bearish signal.</p><br>
+        <p><strong style="color:var(--text);font-family:var(--mono);">52-Week Proximity</strong> — Stock within 15% of its yearly low may be in accumulation. Near yearly high may be overextended.</p>
+      </div>
+      <div style="margin-top:12px;font-size:11px;color:var(--muted);line-height:1.6;font-family:var(--mono);">Always combine signals with fundamental research. Never act on a single indicator alone.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const DEFAULT_WATCHLIST = ['AAPL','NVDA','TSLA','AMZN','MSFT','META','GOOGL','AMD'];
+let watchlist = [...DEFAULT_WATCHLIST];
+let stockData = {};
+let apiKey = localStorage.getItem('finnhub_key') || '';
+
+// Show/hide API setup
+function checkApiSetup() {
+  if (apiKey) {
+    document.getElementById('apiSetup').style.display = 'none';
+    document.getElementById('apiKeyInput').value = apiKey;
+    loadAll();
+  }
+}
+
+function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) return alert('Please paste your Finnhub API key first.');
+  apiKey = key;
+  localStorage.setItem('finnhub_key', key);
+  document.getElementById('apiSetup').style.display = 'none';
+  loadAll();
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['screener','guide'][i] === tab);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+function addTicker() {
+  const input = document.getElementById('tickerInput');
+  const ticker = input.value.trim().toUpperCase().replace(/[^A-Z]/g, '');
+  if (!ticker || watchlist.includes(ticker)) { input.value = ''; return; }
+  watchlist.push(ticker);
+  input.value = '';
+  renderChips();
+  fetchAndRender(ticker);
+}
+
+function removeTicker(ticker) {
+  watchlist = watchlist.filter(t => t !== ticker);
+  delete stockData[ticker];
+  renderChips();
+  renderTable();
+  renderStats();
+}
+
+function renderChips() {
+  document.getElementById('chips').innerHTML = watchlist.map(t =>
+    `<div class="chip" onclick="removeTicker('${t}')">${t} <span>&#215;</span></div>`
+  ).join('');
+}
+
+// ── FINNHUB API CALLS ─────────────────────────────────────
+async function finnhub(endpoint) {
+  const url = `https://finnhub.io/api/v1/${endpoint}&token=${apiKey}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fetchAndRender(ticker) {
+  setRowLoading(ticker);
+  try {
+    // Get quote (current price, change, 52w high/low)
+    const quote = await finnhub(`quote?symbol=${ticker}`);
+    if (!quote.c || quote.c === 0) throw new Error('No data');
+
+    // Get 1 year of daily candles
+    const to   = Math.floor(Date.now() / 1000);
+    const from = to - (365 * 24 * 3600);
+    const candles = await finnhub(`stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}`);
+
+    if (!candles.c || candles.c.length < 30) throw new Error('Insufficient history');
+
+    const closes = candles.c;
+    const rsi    = calcRSI(closes, 14);
+    const ma50   = sma(closes, 50);
+    const ma200  = sma(closes, 200);
+    const maCross = getMACross(ma50, ma200);
+    const { hist } = calcMACD(closes);
+
+    // 52-week high/low from candle data
+    const high52 = Math.max(...candles.h);
+    const low52  = Math.min(...candles.l);
+
+    const signalInfo = getSignal(rsi, hist, maCross, quote.c, low52, high52);
+
+    stockData[ticker] = {
+      ticker,
+      price:     quote.c,
+      change:    quote.d,
+      changePct: quote.dp,
+      rsi, ma50, ma200, maCross, hist,
+      high52, low52,
+      signal:  signalInfo.signal,
+      reasons: signalInfo.reasons,
+    };
+
+    showError('');
+  } catch(e) {
+    stockData[ticker] = { ticker, error: true, signal: 'ERR' };
+    if (e.message.includes('401') || e.message.includes('403')) {
+      showError('API key rejected — double-check your Finnhub key is correct and active.');
+    }
+  }
+  renderTable();
+  renderStats();
+  document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+}
+
+async function loadAll() {
+  stockData = {};
+  renderTable();
+  for (const t of watchlist) await fetchAndRender(t);
+}
+
+async function refreshAll() {
+  stockData = {};
+  renderTable();
+  for (const t of watchlist) await fetchAndRender(t);
+}
+
+// ── INDICATORS ────────────────────────────────────────────
+function calcRSI(closes, period) {
+  if (closes.length < period + 1) return 50;
+  let gains = 0, losses = 0;
+  for (let i = closes.length - period; i < closes.length; i++) {
+    const d = closes[i] - closes[i-1];
+    if (d > 0) gains += d; else losses -= d;
+  }
+  const ag = gains / period, al = losses / period;
+  if (al === 0) return 100;
+  return Math.round(100 - 100 / (1 + ag / al));
+}
+
+function emaArr(data, period) {
+  const k = 2 / (period + 1);
+  let r = [data[0]];
+  for (let i = 1; i < data.length; i++) r.push(data[i] * k + r[i-1] * (1-k));
+  return r;
+}
+
+function sma(data, period) {
+  if (data.length < period) return null;
+  return data.slice(-period).reduce((a,b) => a+b, 0) / period;
+}
+
+function calcMACD(closes) {
+  const e12  = emaArr(closes, 12);
+  const e26  = emaArr(closes, 26);
+  const macd = e12.map((v,i) => v - e26[i]);
+  const sig  = emaArr(macd.slice(-9), 9);
+  const hist = macd[macd.length-1] - sig[sig.length-1];
+  return { hist };
+}
+
+function getMACross(ma50, ma200) {
+  if (!ma50 || !ma200) return 'neutral';
+  return ma50 > ma200 ? 'golden' : 'death';
+}
+
+function getSignal(rsi, hist, maCross, price, low52, high52) {
+  let bull = 0, bear = 0, reasons = [];
+  if      (rsi < 32) { bull += 2; reasons.push(`RSI oversold (${rsi})`); }
+  else if (rsi < 40) { bull += 1; reasons.push(`RSI near oversold (${rsi})`); }
+  else if (rsi > 68) { bear += 2; reasons.push(`RSI overbought (${rsi})`); }
+  else if (rsi > 60) { bear += 1; reasons.push(`RSI near overbought (${rsi})`); }
+
+  if      (maCross === 'golden') { bull += 2; reasons.push('Golden Cross'); }
+  else if (maCross === 'death')  { bear += 2; reasons.push('Death Cross'); }
+
+  if (hist > 0) { bull += 1; reasons.push('MACD bullish'); }
+  else           { bear += 1; reasons.push('MACD bearish'); }
+
+  const fromLow  = ((price - low52)  / low52)  * 100;
+  const fromHigh = ((high52 - price) / high52) * 100;
+  if (fromLow  < 15) { bull += 1; reasons.push(`Near 52w low (+${fromLow.toFixed(1)}%)`); }
+  if (fromHigh < 10) { bear += 1; reasons.push(`Near 52w high (-${fromHigh.toFixed(1)}%)`); }
+
+  let signal = 'HOLD';
+  if      (bull >= 3)                  signal = 'BUY';
+  else if (bear >= 3)                  signal = 'SELL';
+  else if (bull > bear && bull >= 2)   signal = 'WATCH';
+  else if (bear > bull && bear >= 2)   signal = 'WATCH';
+  return { signal, reasons };
+}
+
+// ── RENDER ────────────────────────────────────────────────
+function setRowLoading(ticker) {
+  const tbody = document.getElementById('stockTable');
+  let row = document.getElementById('row-' + ticker);
+  if (!row) {
+    row = document.createElement('tr');
+    row.id = 'row-' + ticker;
+    tbody.appendChild(row);
+  }
+  row.innerHTML = `<td colspan="7" class="loading-cell"><span class="spinner"></span>Loading ${ticker}...</td>`;
+}
+
+function renderTable() {
+  const tbody = document.getElementById('stockTable');
+  tbody.innerHTML = '';
+
+  if (!watchlist.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="loading-cell">Add tickers above to get started.</td></tr>`;
+    return;
+  }
+
+  watchlist.forEach(ticker => {
+    const d = stockData[ticker];
+    const tr = document.createElement('tr');
+    tr.id = 'row-' + ticker;
+
+    if (!d) {
+      tr.innerHTML = `<td colspan="7" class="loading-cell"><span class="spinner"></span>Loading ${ticker}...</td>`;
+      tbody.appendChild(tr);
+      return;
+    }
+
+    if (d.error) {
+      tr.innerHTML = `
+        <td><div class="ticker-cell">${ticker}</div></td>
+        <td colspan="6" style="color:var(--muted);font-size:12px;font-family:var(--mono);">
+          Failed to load — check ticker symbol or API key
+        </td>`;
+      tbody.appendChild(tr);
+      return;
+    }
+
+    const rsiColor = d.rsi < 32 ? 'var(--green)' : d.rsi > 68 ? 'var(--red)' : d.rsi < 40 || d.rsi > 60 ? 'var(--amber)' : 'var(--muted)';
+    const rsiBarColor = d.rsi < 32 ? '#10b981' : d.rsi > 68 ? '#ef4444' : d.rsi < 40 || d.rsi > 60 ? '#f59e0b' : '#6b7a99';
+
+    const inds = [];
+    if (d.maCross === 'golden') inds.push('<span class="ind ind-bull">GX</span>');
+    else                        inds.push('<span class="ind ind-bear">DX</span>');
+    if (d.hist > 0) inds.push('<span class="ind ind-bull">MACD+</span>');
+    else            inds.push('<span class="ind ind-bear">MACD-</span>');
+    if (d.rsi < 32) inds.push('<span class="ind ind-bull">OS</span>');
+    else if (d.rsi > 68) inds.push('<span class="ind ind-bear">OB</span>');
+
+    tr.innerHTML = `
+      <td>
+        <div class="ticker-cell">${ticker}</div>
+      </td>
+      <td><div class="price">$${d.price.toFixed(2)}</div></td>
+      <td><div class="change ${d.changePct >= 0 ? 'pos' : 'neg'}">${d.changePct >= 0 ? '+' : ''}${d.changePct.toFixed(2)}%</div></td>
+      <td>
+        <div class="rsi-wrap">
+          <span class="rsi-num" style="color:${rsiColor}">${d.rsi}</span>
+          <div class="rsi-bar-bg"><div class="rsi-bar-fill" style="width:${d.rsi}%;background:${rsiBarColor}"></div></div>
+        </div>
+      </td>
+      <td style="font-family:var(--mono);font-size:12px;color:${d.maCross==='golden'?'var(--green)':'var(--red)'}">
+        ${d.maCross === 'golden' ? 'Golden Cross' : 'Death Cross'}
+      </td>
+      <td><span class="signal-badge ${d.signal}">${d.signal}</span></td>
+      <td><div class="ind-wrap">${inds.join('')}</div></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderStats() {
+  const loaded = Object.values(stockData).filter(d => !d.error);
+  const buys   = loaded.filter(d => d.signal === 'BUY').length;
+  const sells  = loaded.filter(d => d.signal === 'SELL').length;
+  const watches= loaded.filter(d => d.signal === 'WATCH').length;
+  const avgRSI = loaded.length ? Math.round(loaded.reduce((a,d) => a + d.rsi, 0) / loaded.length) : '—';
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Tracked</div><div class="stat-value">${watchlist.length}</div></div>
+    <div class="stat-card"><div class="stat-label">BUY</div><div class="stat-value green">${buys}</div></div>
+    <div class="stat-card"><div class="stat-label">SELL</div><div class="stat-value red">${sells}</div></div>
+    <div class="stat-card"><div class="stat-label">WATCH</div><div class="stat-value amber">${watches}</div></div>
+    <div class="stat-card"><div class="stat-label">Avg RSI</div><div class="stat-value" style="color:${avgRSI>60?'var(--red)':avgRSI<40?'var(--green)':'var(--text)'}">${avgRSI}</div></div>
+  `;
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorNote');
+  el.style.display = msg ? 'block' : 'none';
+  el.textContent = msg;
+}
+
+// Init
+renderChips();
+renderStats();
+checkApiSetup();
+</script>
+</body>
+</html>
