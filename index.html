@@ -299,59 +299,81 @@ async function finnhub(endpoint) {
   return res.json();
 }
 
+// ── CANDLE CACHE (prevents random RSI fluctuation on refresh) ─
+function cacheKey(ticker) { return 'candle_' + ticker; }
+
+function saveCandles(ticker, data) {
+  try { localStorage.setItem(cacheKey(ticker), JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
+}
+
+function loadCachedCandles(ticker) {
+  try {
+    const raw = localStorage.getItem(cacheKey(ticker));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.ts > 8 * 3600 * 1000) return null; // expire after 8 hours
+    return parsed.data;
+  } catch(e) { return null; }
+}
+
 async function fetchAndRender(ticker) {
   setRowLoading(ticker);
   try {
-    // Get quote
-    const quote = await finnhub(`quote?symbol=${ticker}`);
+    const quote = await finnhub('quote?symbol=' + ticker);
     if (!quote || quote.c === undefined || quote.c === 0) throw new Error('No data — check ticker symbol');
 
-    // Get candles via yfinance proxy (more reliable on free tier)
-    const to   = Math.floor(Date.now() / 1000);
-    const from = to - (400 * 24 * 3600); // 400 days to ensure enough data
-    const url  = `https://finnhub.io/api/v1/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}&token=${apiKey}`;
-    const res  = await fetch(url);
-    const candles = await res.json();
+    let closes, high52, low52, usingCache = false;
 
-    let closes, high52, low52;
-
-    if (candles && candles.s === 'ok' && candles.c && candles.c.length >= 30) {
-      closes = candles.c.filter(v => v !== null && v > 0);
-      high52 = Math.max(...candles.h);
-      low52  = Math.min(...candles.l);
+    // Try cache first — prevents RSI flipping on every refresh
+    const cached = loadCachedCandles(ticker);
+    if (cached) {
+      closes = cached.closes;
+      high52 = cached.high52;
+      low52  = cached.low52;
+      usingCache = true;
     } else {
-      // Fallback: use quote data only with estimated values
-      closes = generateFallbackCloses(quote.c, quote.pc);
-      high52 = quote.h || quote.c * 1.3;
-      low52  = quote.l || quote.c * 0.7;
+      const to   = Math.floor(Date.now() / 1000);
+      const from = to - (400 * 24 * 3600);
+      const url  = 'https://finnhub.io/api/v1/stock/candle?symbol=' + ticker + '&resolution=D&from=' + from + '&to=' + to + '&token=' + apiKey;
+      const res  = await fetch(url);
+      const candles = await res.json();
+
+      if (candles && candles.s === 'ok' && candles.c && candles.c.length >= 30) {
+        closes = candles.c.filter(function(v) { return v !== null && v > 0; });
+        high52 = Math.max.apply(null, candles.h);
+        low52  = Math.min.apply(null, candles.l);
+        saveCandles(ticker, { closes: closes, high52: high52, low52: low52 });
+      } else {
+        throw new Error('Historical data unavailable — markets may be closed. Try again during market hours (9am-4pm ET)');
+      }
     }
 
-    const rsi     = calcRSI(closes, 14);
-    const ma50    = sma(closes, 50);
-    const ma200   = sma(closes, 200);
-    const maCross = getMACross(ma50, ma200);
-    const { hist } = calcMACD(closes);
-
+    const rsi      = calcRSI(closes, 14);
+    const ma50     = sma(closes, 50);
+    const ma200    = sma(closes, 200);
+    const maCross  = getMACross(ma50, ma200);
+    const macdRes  = calcMACD(closes);
+    const hist     = macdRes.hist;
     const signalInfo = getSignal(rsi, hist, maCross, quote.c, low52, high52);
 
     stockData[ticker] = {
-      ticker,
+      ticker:    ticker,
       price:     quote.c,
       change:    quote.d,
       changePct: quote.dp,
-      rsi, ma50, ma200, maCross, hist,
-      high52, low52,
-      signal:   signalInfo.signal,
-      reasons:  signalInfo.reasons,
-      limited:  !candles || candles.s !== 'ok',
+      rsi: rsi, ma50: ma50, ma200: ma200, maCross: maCross, hist: hist,
+      high52: high52, low52: low52,
+      signal:    signalInfo.signal,
+      reasons:   signalInfo.reasons,
+      usingCache: usingCache,
     };
 
     showError('');
   } catch(e) {
-    console.error(ticker, e);
-    stockData[ticker] = { ticker, error: true, signal: 'ERR', errMsg: e.message };
+    console.error(ticker, e.message);
+    stockData[ticker] = { ticker: ticker, error: true, signal: 'ERR', errMsg: e.message };
     if (e.message.includes('401') || e.message.includes('403') || e.message.includes('Invalid')) {
-      showError('API key issue — try clearing and re-entering your key below.');
+      showError('API key issue — use the Reset Key button to re-enter your key.');
       apiKey = '';
       localStorage.removeItem('finnhub_key');
       document.getElementById('apiSetup').style.display = 'block';
@@ -360,19 +382,6 @@ async function fetchAndRender(ticker) {
   renderTable();
   renderStats();
   document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
-}
-
-// Fallback when candle history unavailable — generates synthetic closes for basic RSI
-function generateFallbackCloses(current, prev) {
-  const closes = [];
-  let price = current * 0.85;
-  for (let i = 0; i < 200; i++) {
-    price = price * (1 + (Math.random() - 0.48) * 0.015);
-    closes.push(price);
-  }
-  closes.push(prev || current * 0.99);
-  closes.push(current);
-  return closes;
 }
 
 async function loadAll() {
@@ -552,6 +561,10 @@ function showError(msg) {
 function resetApiKey() {
   apiKey = '';
   localStorage.removeItem('finnhub_key');
+  // Also clear all candle caches so fresh data loads next time
+  Object.keys(localStorage).forEach(function(k) {
+    if (k.startsWith('candle_')) localStorage.removeItem(k);
+  });
   stockData = {};
   document.getElementById('apiKeyInput').value = '';
   document.getElementById('apiSetup').style.display = 'block';
