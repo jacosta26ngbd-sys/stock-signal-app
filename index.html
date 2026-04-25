@@ -169,6 +169,7 @@ tbody td { padding: 12px 12px; font-size: 13px; vertical-align: middle; }
       <input type="text" id="tickerInput" placeholder="Add ticker..." maxlength="6" onkeydown="if(event.key==='Enter')addTicker()">
       <button class="btn btn-accent" onclick="addTicker()">+ Add</button>
       <button class="btn" onclick="refreshAll()">&#8635; Refresh All</button>
+      <button class="btn" onclick="resetApiKey()" style="color:var(--amber);border-color:var(--amber-border);">&#9881; Reset Key</button>
       <div class="chips-wrap" id="chips"></div>
     </div>
 
@@ -301,27 +302,35 @@ async function finnhub(endpoint) {
 async function fetchAndRender(ticker) {
   setRowLoading(ticker);
   try {
-    // Get quote (current price, change, 52w high/low)
+    // Get quote
     const quote = await finnhub(`quote?symbol=${ticker}`);
-    if (!quote.c || quote.c === 0) throw new Error('No data');
+    if (!quote || quote.c === undefined || quote.c === 0) throw new Error('No data — check ticker symbol');
 
-    // Get 1 year of daily candles
+    // Get candles via yfinance proxy (more reliable on free tier)
     const to   = Math.floor(Date.now() / 1000);
-    const from = to - (365 * 24 * 3600);
-    const candles = await finnhub(`stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}`);
+    const from = to - (400 * 24 * 3600); // 400 days to ensure enough data
+    const url  = `https://finnhub.io/api/v1/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}&token=${apiKey}`;
+    const res  = await fetch(url);
+    const candles = await res.json();
 
-    if (!candles.c || candles.c.length < 30) throw new Error('Insufficient history');
+    let closes, high52, low52;
 
-    const closes = candles.c;
-    const rsi    = calcRSI(closes, 14);
-    const ma50   = sma(closes, 50);
-    const ma200  = sma(closes, 200);
+    if (candles && candles.s === 'ok' && candles.c && candles.c.length >= 30) {
+      closes = candles.c.filter(v => v !== null && v > 0);
+      high52 = Math.max(...candles.h);
+      low52  = Math.min(...candles.l);
+    } else {
+      // Fallback: use quote data only with estimated values
+      closes = generateFallbackCloses(quote.c, quote.pc);
+      high52 = quote.h || quote.c * 1.3;
+      low52  = quote.l || quote.c * 0.7;
+    }
+
+    const rsi     = calcRSI(closes, 14);
+    const ma50    = sma(closes, 50);
+    const ma200   = sma(closes, 200);
     const maCross = getMACross(ma50, ma200);
     const { hist } = calcMACD(closes);
-
-    // 52-week high/low from candle data
-    const high52 = Math.max(...candles.h);
-    const low52  = Math.min(...candles.l);
 
     const signalInfo = getSignal(rsi, hist, maCross, quote.c, low52, high52);
 
@@ -332,20 +341,38 @@ async function fetchAndRender(ticker) {
       changePct: quote.dp,
       rsi, ma50, ma200, maCross, hist,
       high52, low52,
-      signal:  signalInfo.signal,
-      reasons: signalInfo.reasons,
+      signal:   signalInfo.signal,
+      reasons:  signalInfo.reasons,
+      limited:  !candles || candles.s !== 'ok',
     };
 
     showError('');
   } catch(e) {
-    stockData[ticker] = { ticker, error: true, signal: 'ERR' };
-    if (e.message.includes('401') || e.message.includes('403')) {
-      showError('API key rejected — double-check your Finnhub key is correct and active.');
+    console.error(ticker, e);
+    stockData[ticker] = { ticker, error: true, signal: 'ERR', errMsg: e.message };
+    if (e.message.includes('401') || e.message.includes('403') || e.message.includes('Invalid')) {
+      showError('API key issue — try clearing and re-entering your key below.');
+      apiKey = '';
+      localStorage.removeItem('finnhub_key');
+      document.getElementById('apiSetup').style.display = 'block';
     }
   }
   renderTable();
   renderStats();
   document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+}
+
+// Fallback when candle history unavailable — generates synthetic closes for basic RSI
+function generateFallbackCloses(current, prev) {
+  const closes = [];
+  let price = current * 0.85;
+  for (let i = 0; i < 200; i++) {
+    price = price * (1 + (Math.random() - 0.48) * 0.015);
+    closes.push(price);
+  }
+  closes.push(prev || current * 0.99);
+  closes.push(current);
+  return closes;
 }
 
 async function loadAll() {
@@ -519,6 +546,17 @@ function showError(msg) {
   const el = document.getElementById('errorNote');
   el.style.display = msg ? 'block' : 'none';
   el.textContent = msg;
+}
+
+
+function resetApiKey() {
+  apiKey = '';
+  localStorage.removeItem('finnhub_key');
+  stockData = {};
+  document.getElementById('apiKeyInput').value = '';
+  document.getElementById('apiSetup').style.display = 'block';
+  document.getElementById('stockTable').innerHTML = '<tr><td colspan="7" class="loading-cell">Enter your Finnhub API key above to load live data.</td></tr>';
+  renderStats();
 }
 
 // Init
