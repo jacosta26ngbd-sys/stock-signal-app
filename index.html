@@ -174,7 +174,8 @@ tbody td { padding: 12px 12px; font-size: 13px; vertical-align: middle; }
       <div class="chips-wrap" id="chips"></div>
     </div>
 
-    <div class="refresh-bar">
+    <div id="loadingStatus" style="display:none;font-family:var(--mono);font-size:11px;color:var(--amber);background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:6px;padding:8px 14px;margin-bottom:12px;"></div>
+<div class="refresh-bar">
       <div class="last-updated" id="lastUpdated">Last updated: —</div>
     </div>
 
@@ -417,16 +418,44 @@ async function fetchAndRender(ticker) {
   document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
 }
 
+// Delay helper to avoid Alpha Vantage rate limit (5 calls/min)
+function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
 async function loadAll() {
   stockData = {};
   renderTable();
-  for (const t of watchlist) await fetchAndRender(t);
+  for (var i = 0; i < watchlist.length; i++) {
+    await fetchAndRender(watchlist[i]);
+    // Only delay if candle cache was empty (actual AV call was made)
+    var d = stockData[watchlist[i]];
+    if (d && !d.error && !d.usingCache && i < watchlist.length - 1) {
+      showLoadingStatus('Rate limit protection — loading next ticker in 15s... (' + (i+1) + '/' + watchlist.length + ')');
+      await sleep(15000);
+      showLoadingStatus('');
+    }
+  }
 }
 
 async function refreshAll() {
+  // On manual refresh — clear candle cache so fresh data loads
+  Object.keys(localStorage).forEach(function(k) {
+    if (k.startsWith('candle_')) localStorage.removeItem(k);
+  });
   stockData = {};
   renderTable();
-  for (const t of watchlist) await fetchAndRender(t);
+  for (var i = 0; i < watchlist.length; i++) {
+    await fetchAndRender(watchlist[i]);
+    if (i < watchlist.length - 1) {
+      showLoadingStatus('Loading ' + (i+2) + ' of ' + watchlist.length + '... (rate limit protection)');
+      await sleep(15000);
+      showLoadingStatus('');
+    }
+  }
+}
+
+function showLoadingStatus(msg) {
+  var el = document.getElementById('loadingStatus');
+  if (el) { el.textContent = msg; el.style.display = msg ? 'block' : 'none'; }
 }
 
 // ── INDICATORS ────────────────────────────────────────────
