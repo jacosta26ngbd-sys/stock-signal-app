@@ -360,7 +360,7 @@ async function fetchAndRender(ticker) {
       usingCache = true;
     } else {
       // Fetch daily candle history from Alpha Vantage (free, no restrictions)
-      const avUrl = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=' + ticker + '&outputsize=full&apikey=' + avKey;
+      const avUrl = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=' + ticker + '&outputsize=compact&apikey=' + avKey;
       const avRes = await fetch(avUrl);
       const avData = await avRes.json();
 
