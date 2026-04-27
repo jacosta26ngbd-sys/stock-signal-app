@@ -188,6 +188,7 @@ tbody td { padding: 12px 12px; font-size: 13px; vertical-align: middle; }
             <th>Ticker</th>
             <th>Price</th>
             <th>Change</th>
+            <th>Div Yield</th>
             <th>RSI (14)</th>
             <th>MA Cross</th>
             <th>Signal</th>
@@ -195,7 +196,7 @@ tbody td { padding: 12px 12px; font-size: 13px; vertical-align: middle; }
           </tr>
         </thead>
         <tbody id="stockTable">
-          <tr><td colspan="7" class="loading-cell">Enter your Finnhub API key above to load live data.</td></tr>
+          <tr><td colspan="8" class="loading-cell">Enter your Finnhub API key above to load live data.</td></tr>
         </tbody>
       </table>
     </div>
@@ -331,6 +332,15 @@ async function fetchAndRender(ticker) {
     const quote = await finnhub('quote?symbol=' + ticker);
     if (!quote || quote.c === undefined || quote.c === 0) throw new Error('No data — check ticker symbol');
 
+    // Fetch company metrics for dividend yield
+    let divYield = null;
+    try {
+      const metrics = await finnhub('stock/metric?symbol=' + ticker + '&metric=all');
+      if (metrics && metrics.metric) {
+        divYield = metrics.metric['dividendYieldIndicatedAnnual'] || null;
+      }
+    } catch(e) { divYield = null; }
+
     let closes, high52, low52, usingCache = false;
 
     // Try cache first — prevents RSI flipping on every refresh
@@ -353,7 +363,9 @@ async function fetchAndRender(ticker) {
         low52  = Math.min.apply(null, candles.l);
         saveCandles(ticker, { closes: closes, high52: high52, low52: low52 });
       } else {
-        throw new Error('Historical data unavailable — markets may be closed. Try again during market hours (9am-4pm ET)');
+        // Use quote 52w high/low as fallback so basic price data still shows
+        // RSI/MACD will show as N/A but price and dividend still render
+        throw new Error('Candle data unavailable — will retry next market session');
       }
     }
 
@@ -375,6 +387,7 @@ async function fetchAndRender(ticker) {
       signal:    signalInfo.signal,
       reasons:   signalInfo.reasons,
       usingCache: usingCache,
+      divYield: divYield,
     };
 
     showError('');
@@ -479,7 +492,7 @@ function setRowLoading(ticker) {
     row.id = 'row-' + ticker;
     tbody.appendChild(row);
   }
-  row.innerHTML = `<td colspan="7" class="loading-cell"><span class="spinner"></span>Loading ${ticker}...</td>`;
+  row.innerHTML = `<td colspan="8" class="loading-cell"><span class="spinner"></span>Loading ${ticker}...</td>`;
 }
 
 function renderTable() {
@@ -487,7 +500,7 @@ function renderTable() {
   tbody.innerHTML = '';
 
   if (!watchlist.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="loading-cell">Add tickers above to get started.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell">Add tickers above to get started.</td></tr>`;
     return;
   }
 
@@ -497,7 +510,7 @@ function renderTable() {
     tr.id = 'row-' + ticker;
 
     if (!d) {
-      tr.innerHTML = `<td colspan="7" class="loading-cell"><span class="spinner"></span>Loading ${ticker}...</td>`;
+      tr.innerHTML = `<td colspan="8" class="loading-cell"><span class="spinner"></span>Loading ${ticker}...</td>`;
       tbody.appendChild(tr);
       return;
     }
@@ -529,6 +542,7 @@ function renderTable() {
       </td>
       <td><div class="price">$${d.price.toFixed(2)}</div></td>
       <td><div class="change ${d.changePct >= 0 ? 'pos' : 'neg'}">${d.changePct >= 0 ? '+' : ''}${d.changePct.toFixed(2)}%</div></td>
+      <td><div style="font-family:var(--mono);font-size:12px;color:${d.divYield && d.divYield > 0 ? 'var(--green)' : 'var(--muted)'}">${d.divYield && d.divYield > 0 ? d.divYield.toFixed(2) + '%' : '—'}</div></td>
       <td>
         <div class="rsi-wrap">
           <span class="rsi-num" style="color:${rsiColor}">${d.rsi}</span>
@@ -577,7 +591,7 @@ function resetApiKey() {
   stockData = {};
   document.getElementById('apiKeyInput').value = '';
   document.getElementById('apiSetup').style.display = 'block';
-  document.getElementById('stockTable').innerHTML = '<tr><td colspan="7" class="loading-cell">Enter your Finnhub API key above to load live data.</td></tr>';
+  document.getElementById('stockTable').innerHTML = '<tr><td colspan="8" class="loading-cell">Enter your Finnhub API key above to load live data.</td></tr>';
   renderStats();
 }
 
