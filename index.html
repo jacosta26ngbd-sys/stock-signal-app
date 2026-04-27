@@ -236,10 +236,17 @@ tbody td { padding: 12px 12px; font-size: 13px; vertical-align: middle; }
 </div>
 
 <script>
-const DEFAULT_WATCHLIST = ['AAPL','NVDA','TSLA','AMZN','MSFT','META','GOOGL','AMD'];
-let watchlist = [...DEFAULT_WATCHLIST];
-let stockData = {};
-let apiKey = localStorage.getItem('finnhub_key') || '';
+const DEFAULT_WATCHLIST = ["AAPL","NVDA","TSLA","AMZN","MSFT","META","GOOGL","AMD"];
+function loadWatchlist() {
+  try { var s = localStorage.getItem("watchlist"); if (s) { var p = JSON.parse(s); if (Array.isArray(p) && p.length > 0) return p; } } catch(e) {}
+  return DEFAULT_WATCHLIST.slice();
+}
+function saveWatchlist() {
+  try { localStorage.setItem("watchlist", JSON.stringify(watchlist)); } catch(e) {}
+}
+var watchlist = loadWatchlist();
+var stockData = {};
+var apiKey = localStorage.getItem("finnhub_key") || "";
 
 // Show/hide API setup
 function checkApiSetup() {
@@ -272,6 +279,7 @@ function addTicker() {
   const ticker = input.value.trim().toUpperCase().replace(/[^A-Z]/g, '');
   if (!ticker || watchlist.includes(ticker)) { input.value = ''; return; }
   watchlist.push(ticker);
+  saveWatchlist();
   input.value = '';
   renderChips();
   fetchAndRender(ticker);
@@ -279,6 +287,7 @@ function addTicker() {
 
 function removeTicker(ticker) {
   watchlist = watchlist.filter(t => t !== ticker);
+  saveWatchlist();
   delete stockData[ticker];
   renderChips();
   renderTable();
