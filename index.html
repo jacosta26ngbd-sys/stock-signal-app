@@ -504,6 +504,17 @@ function getMACross(ma50, ma200) {
 
 function getSignal(rsi, hist, maCross, price, low52, high52) {
   let bull = 0, bear = 0, reasons = [];
+
+  // RSI OVERRIDE — extreme readings force signal regardless of other indicators
+  if (rsi >= 75) {
+    reasons.push(`RSI extremely overbought (${rsi}) — override`);
+    return { signal: 'SELL', reasons };
+  }
+  if (rsi <= 25) {
+    reasons.push(`RSI extremely oversold (${rsi}) — override`);
+    return { signal: 'BUY', reasons };
+  }
+
   if      (rsi < 32) { bull += 2; reasons.push(`RSI oversold (${rsi})`); }
   else if (rsi < 40) { bull += 1; reasons.push(`RSI near oversold (${rsi})`); }
   else if (rsi > 68) { bear += 2; reasons.push(`RSI overbought (${rsi})`); }
